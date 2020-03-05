@@ -2,14 +2,22 @@
 package ssqs
 
 import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/sqsiface"
 )
 
+// DefaultClient returns a new SQS client.
+var DefaultClient = func(config aws.Config) sqsiface.ClientAPI {
+	return sqs.New(config)
+}
+
 // Consumer represents a consumer.
 type Consumer struct {
-	client   sqsiface.SQSAPI
+	client   sqsiface.ClientAPI
 	finish   chan struct{}
 	Errors   chan error
 	Messages chan *Message
@@ -38,7 +46,7 @@ func New(q *Queue) (*Consumer, error) {
 	}
 
 	return &Consumer{
-		client:   sqs.New(c),
+		client:   DefaultClient(c),
 		finish:   make(chan struct{}, 1),
 		Errors:   make(chan error, 1),
 		Messages: make(chan *Message, 1),
@@ -58,7 +66,7 @@ func (c *Consumer) Delete(m *Message) error {
 		ReceiptHandle: &m.Receipt,
 	}
 
-	if _, err := c.client.DeleteMessageRequest(input).Send(); err != nil {
+	if _, err := c.client.DeleteMessageRequest(input).Send(context.Background()); err != nil {
 		return err
 	}
 	return nil
@@ -83,7 +91,7 @@ func (c *Consumer) Start() {
 }
 
 func (c *Consumer) receive(input *sqs.ReceiveMessageInput) {
-	r, err := c.client.ReceiveMessageRequest(input).Send()
+	r, err := c.client.ReceiveMessageRequest(input).Send(context.Background())
 	if err != nil {
 		c.Errors <- err
 		return
